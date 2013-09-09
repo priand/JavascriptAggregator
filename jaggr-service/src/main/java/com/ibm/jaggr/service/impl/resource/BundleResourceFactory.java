@@ -17,6 +17,7 @@
 package com.ibm.jaggr.service.impl.resource;
 
 import java.io.FileNotFoundException;
+import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
@@ -44,14 +45,12 @@ public class BundleResourceFactory implements IResourceFactory, IExecutableExten
 	
 	private BundleContext context;
 	private ServiceReference urlConverterSR;
-	private IAggregator aggregator = null;
 
 	public BundleResourceFactory() {
 	}
 
 	@Override
 	public IResource newResource(URI uri) {
-		
 		IResource result = null;
 		String scheme = uri.getScheme();
 		if ("bundleresource".equals(scheme) || "bundleentry".equals(scheme)) { //$NON-NLS-1$ //$NON-NLS-2$
@@ -60,8 +59,8 @@ public class BundleResourceFactory implements IResourceFactory, IExecutableExten
 			if (converter != null) {
 				URL fileUrl = null;
 				try {
-					fileUrl = converter.toFileURL(uri.toURL());
-					result = getAggregator().newResource(PathUtil.url2uri(fileUrl));
+					fileUrl = converter.toFileURL(toURL(uri));
+					result = new FileResource(uri, this, PathUtil.url2uri(fileUrl));
 				} catch (FileNotFoundException e) {
 					if (log.isLoggable(Level.FINE)) {
 						log.log(Level.FINE, uri.toString(), e);
@@ -72,16 +71,18 @@ public class BundleResourceFactory implements IResourceFactory, IExecutableExten
 						log.log(Level.WARNING, uri.toString(), t);
 					}
 					result = new BundleResource(uri, context);
+				} finally {
+					context.ungetService(urlConverterSR);
 				}
 			} else {
 				result = new BundleResource(uri, context);
 			}
 		} else if ("namedbundleresource".equals(scheme)) { //$NON-NLS-1$
 			// Support aggregator specific URI scheme for named bundles
-			String bundleSymbolicName = uri.getHost();
-			Bundle bundle = Platform.getBundle(bundleSymbolicName);
+			String bundleName = getNBRBundleName(uri);
+			Bundle bundle = getBundle(bundleName);
 			if (bundle != null) {
-				URL url = bundle.getEntry(uri.getPath());
+				URL url = bundle.getEntry(getNBRPath(bundleName, uri));
 				if (url != null) {
 					try {
 						uri = PathUtil.url2uri(url);
@@ -103,27 +104,91 @@ public class BundleResourceFactory implements IResourceFactory, IExecutableExten
 		return result;
 	}
 
+	/* (non-Javadoc)
+	 * @see org.eclipse.core.runtime.IExecutableExtension#setInitializationData(org.eclipse.core.runtime.IConfigurationElement, java.lang.String, java.lang.Object)
+	 */
 	@Override
 	public void setInitializationData(IConfigurationElement config, String arg1,
 			Object arg2) throws CoreException {
 		context = Platform.getBundle(config.getNamespaceIdentifier()).getBundleContext();
 		this.urlConverterSR = context.getServiceReference(org.eclipse.osgi.service.urlconversion.URLConverter.class.getName());
 	}
+	/*
+	 * Package-private initializer for unit testing
+	 */
+	void setInitializationData(BundleContext context, ServiceReference urlConverterSR) {
+		if (this.context != null || this.urlConverterSR != null) {
+			throw new IllegalStateException();
+		}
+		this.context = context;
+		this.urlConverterSR = urlConverterSR;
+	}
 
 	@Override
 	public void initialize(IAggregator aggregator, IAggregatorExtension extension, IExtensionRegistrar registrar) {
-		this.aggregator = aggregator;
 	}
 	
-	protected IAggregator getAggregator() {
-		return aggregator;
-	}
-
 	@Override
 	public boolean handles(URI uri) {
 		String scheme = uri.getScheme();
 		return scheme.equals("bundleentry") ||  //$NON-NLS-1$
 		       scheme.equals("bundleresource") || //$NON-NLS-1$
 		       scheme.equals("namedbundleresource"); //$NON-NLS-1$
+	}
+	
+	
+	/**
+	 * Extracts the bundle's symbolic name from a uri with the <code>namedbundleresource<code> scheme.
+	 * 
+	 * Supports backwards compatibility for names from 1.0.0 release (for now).
+	 * 
+	 * @param uri The uri with a <code>namedbundleresource<code> scheme.
+	 * @return The bundle's symbolic name within the uri.
+	 */
+	protected String getNBRBundleName(URI uri) {
+		String ret = null;
+		
+		String host = uri.getHost();
+		String authority;
+		if (host != null) {
+			ret = host;
+		} else if ((authority = uri.getAuthority()) != null) {
+			ret = authority;
+		} else {
+			String path = uri.getPath();
+			if (path.startsWith("/"))
+				path = path.substring(1);
+			ret = path.substring(0, path.indexOf('/'));
+		}
+		
+		return ret;
+	}
+	
+	/**
+	 * Extracts the path of the file resource from a uri with the <code>namedbundleresource<code> scheme.
+	 * 
+	 * Supports backwards compatibility for names from 1.0.0 release (for now).
+	 * 
+	 * @param bundle The name of the bundle within the uri from {@link BundleResourceFactory#getNBRBundleName(URI)}
+	 * @param uri The uri with a <code>namedbundleresource<code> scheme.
+	 * @return The path of the file resource within the uri.
+	 */
+	protected String getNBRPath(String bundle, URI uri) {
+		String path = uri.getPath();
+		return path.startsWith("/" + bundle) ? path.substring(bundle.length() + 1) : path;
+	}
+	
+	/*
+	 * So that unit test cases can provide alternative implementation
+	 */
+	protected URL toURL(URI uri) throws IOException {
+		return uri.toURL();
+	}
+	
+	/*
+	 * So that unit test cases can provide alternative implementation
+	 */
+	protected Bundle getBundle(String bundleName) {
+		return Platform.getBundle(bundleName);
 	}
 }

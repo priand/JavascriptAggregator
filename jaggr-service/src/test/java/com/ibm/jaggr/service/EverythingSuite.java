@@ -39,6 +39,8 @@ import com.ibm.jaggr.service.impl.modulebuilder.javascript.HasFilteringCompilerP
 import com.ibm.jaggr.service.impl.modulebuilder.javascript.JsModuleContentProviderTest;
 import com.ibm.jaggr.service.impl.modulebuilder.javascript.RequireExpansionCompilerPassTest;
 import com.ibm.jaggr.service.impl.modulebuilder.text.TxtModuleContentProviderTest;
+import com.ibm.jaggr.service.impl.resource.BundleResourceFactoryTests;
+import com.ibm.jaggr.service.impl.resource.FileResourceTests;
 import com.ibm.jaggr.service.impl.transport.AbstractHttpTransportTest;
 import com.ibm.jaggr.service.impl.transport.DojoHttpTransportTest;
 
@@ -65,8 +67,8 @@ import com.ibm.jaggr.service.impl.transport.DojoHttpTransportTest;
 	RequireExpansionCompilerPassTest.class,
 	AbstractHttpTransportTest.class,
 	DojoHttpTransportTest.class,
-	AggregatorImplTest.class
+	AggregatorImplTest.class,
+	BundleResourceFactoryTests.class,
+	FileResourceTests.class
 })
-public class EverythingSuite {
-
-}
+public class EverythingSuite { }
